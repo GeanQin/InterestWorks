@@ -24,6 +24,7 @@ DHT dht(DHTPIN, DHTTYPE);                                    // 温湿度计初�
 Adafruit_SSD1306 display = Adafruit_SSD1306(128, 64, &Wire); // 定义OLED屏幕的分辨率
 
 int init_flag = 0;
+int wait_reboot = 0;
 String weather_icon = String("");
 int weather_wait = 7200;
 
@@ -313,10 +314,13 @@ int http_get(const char *url, String *ret_str)
   return ret;
 }
 
-
 void setup()
 {
   Serial.begin(115200);
+
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // 设置OLED的I2C地址
+  display.setTextColor(SSD1306_WHITE);       // 设置字体颜色
+  display.clearDisplay();
 
   init_flag = 0;
   if (!LittleFS.begin())
@@ -342,10 +346,22 @@ void setup()
 
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid.c_str(), passwd.c_str()); // 连接路由器
+        display.setTextSize(1);  // 设置字体大小2 高12
+        display.setCursor(0, 0); // 设置开始显示文字的坐标
+        display.println("Connectting WiFi");
+        display.display();
+        int wait_count = 0;
         while (WiFi.status() != WL_CONNECTED)
         {
           delay(500);
+          wait_count += 1;
           Serial.print(".");
+          display.print(".");
+          display.display();
+          if(wait_count > 60){
+            LittleFS.format();
+            ESP.restart();
+          }
         }
         Serial.println("WiFi connected");
         Serial.println("IP address: ");
@@ -356,9 +372,6 @@ void setup()
         Serial.println("Contacting Time Server");
         configTime(3600 * TIMEZONE, DAYSAVETIME, "time.nist.gov", "0.pool.ntp.org", "1.pool.ntp.org"); // 配置时间服务器
 
-        display.begin(SSD1306_SWITCHCAPVCC, 0x3C); // 设置OLED的I2C地址
-        display.setTextColor(SSD1306_WHITE);       // 设置字体颜色
-
         dht.begin(); // 开启温湿度计
       }
     }
@@ -368,16 +381,34 @@ void setup()
     WiFi.mode(WIFI_AP);
     WiFi.softAP(RZ_TH_CLOCK_SSID); // 建立热点
     server.begin();                // 开启服务器
+
+    Serial.println("Start AP mode");
+    display.setTextSize(1);  // 设置字体大小2 高12
+    display.setCursor(0, 0); // 设置开始显示文字的坐标
+    display.println("Connect WiFi:");
+    display.println(RZ_TH_CLOCK_SSID);
+    display.println("");
+    display.println("And access this addr:");
+    display.println("192.168.4.1/config");
+    display.display();
   }
-  else
-  {
-    pinMode(RESET_BUTTON_NUM, INPUT); // 重置按钮
-  }
+
+  pinMode(RESET_BUTTON_NUM, INPUT); // 重置按钮
 }
 
 void loop()
 {
   int ret = 0;
+
+  if (wait_reboot)
+  {
+    int reset_flag = digitalRead(RESET_BUTTON_NUM);
+    if (reset_flag == 0)
+    {
+      Serial.println("Get reboot cmd.");
+      ESP.restart();
+    }
+  }
 
   if (!init_flag)
   {
@@ -411,7 +442,14 @@ void loop()
           Serial.println("Have saved ssid and passwd.");
           String ret_str = "Your device's mac is " + WiFi.softAPmacAddress() + " <br>Please reboot now.";
           client.print(ret_str); // 打印MAC，用于日后与账号绑定
-          return;
+          display.clearDisplay();
+          display.setTextSize(1);  // 设置字体大小2 高12
+          display.setCursor(0, 0); // 设置开始显示文字的坐标
+          display.println("Saved ssid&passwd.");
+          display.println("");
+          display.println("Please press button.");
+          display.display();
+          wait_reboot = 1;
         }
         else
         {
@@ -459,6 +497,15 @@ void loop()
   }
   else
   {
+    // reset
+    int reset_flag = digitalRead(RESET_BUTTON_NUM);
+    if (reset_flag == 0)
+    {
+      Serial.println("Get reset cmd.");
+      LittleFS.format();
+      ESP.restart();
+    }
+
     display.clearDisplay(); // 清空屏幕
 
     // 获取时间
@@ -476,16 +523,17 @@ void loop()
     Serial.print(" ");
     Serial.println(md);
 
-    display.setTextSize(2);  // 设置字体大小2 高12
+    display.setTextSize(2);   // 设置字体大小2 高12
     display.setCursor(32, 0); // 设置开始显示文字的坐标
     display.println(hms);
 
-    display.setTextSize(1);   // 设置字体大小1 高6
+    display.setTextSize(1);    // 设置字体大小1 高6
     display.setCursor(96, 16); // 设置开始显示文字的坐标
     display.println(md);
 
     // 获取天气
-    if(weather_wait >= 7200){  // 每小时更新一次
+    if (weather_wait >= 7200)
+    { // 每小时更新一次
       http_get(WEATHER_URL, &weather_icon);
       weather_wait = 0;
     }
@@ -529,18 +577,6 @@ void loop()
     display.println(humidity); // 输出的字符
 
     display.display(); // 使更改的显示生效
-
-    // reset
-    int reset_flag = digitalRead(RESET_BUTTON_NUM);
-    if (reset_flag == 0)
-    {
-      Serial.println("Get reset cmd.");
-      LittleFS.format();
-      while (1)
-      {
-        delay(100);
-      }
-    }
 
     delay(500);
   }
