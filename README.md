@@ -13,4 +13,4 @@ AutoSwitch/auto_switch.ino | esp8266远程控制物理开关
 SmallCar/dianji.c | 树莓派通过wiring控制电机
 SmallCar/duoji.c | 树莓派通过wiring控制舵机
 SmallCar/http.c | 树莓派通过socket接收http请求
-RZ_TH_clock | esp8266时间同步天气温湿度计
+clock_001a01 | esp8266时间同步天气温湿度计(PlatformIO)

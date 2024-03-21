@@ -1,7 +1,0 @@
-{
-    "commentTranslate.hover.enabled": true,
-    "files.associations": {
-        "cmath": "cpp",
-        "typeinfo": "cpp"
-    }
-}
